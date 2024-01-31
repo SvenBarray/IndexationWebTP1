@@ -4,10 +4,12 @@ from urllib.request import urlopen
 from urllib.parse import urljoin
 from urllib.robotparser import RobotFileParser
 from bs4 import BeautifulSoup
+import warnings
+import xml.etree.ElementTree as ET
 
 def crawl(start_url, max_urls=50):
     visited_urls = set()
-    urls_to_visit = [start_url]
+    urls_to_visit = _fetch_sitemap_urls(start_url) + [start_url]
 
     while urls_to_visit and len(visited_urls) < max_urls:
         current_url = urls_to_visit.pop(0)
@@ -50,9 +52,25 @@ def crawl(start_url, max_urls=50):
 
     return visited_urls
 
+warnings.filterwarnings("ignore", category=UserWarning, module='bs4')
+
+def _fetch_sitemap_urls(url):
+    "Parcours le sitemap et récupère les URL à visiter"
+    sitemap_url = urljoin(url, '/sitemap.xml')
+    try:
+        response = urlopen(sitemap_url)
+        sitemap_content = response.read()
+        sitemap = ET.fromstring(sitemap_content)
+        urls = [loc.text for loc in sitemap.findall('.//{http://www.sitemaps.org/schemas/sitemap/0.9}loc')]
+        return urls
+    except Exception as e:
+        print(f"Erreur lors de la récupération du sitemap : {e}")
+        return []
+
 last_request_time = {}  # Dictionnaire pour suivre le temps de la dernière requête par domaine
 
-def _should_wait(domain): # Vérifie si le crawler doit attendre avant de faire une nouvelle requête au domaine donné.
+def _should_wait(domain): 
+    """Vérifie si le crawler doit attendre avant de faire une nouvelle requête au domaine donné."""
     if domain in last_request_time:
         elapsed = (datetime.now() - last_request_time[domain]).total_seconds()
         if elapsed < 5:
@@ -61,7 +79,8 @@ def _should_wait(domain): # Vérifie si le crawler doit attendre avant de faire 
 
 robot_parsers = {} # Initialisation du dictionnaire pour la mise en cache des parseurs de robots.txt
 
-def _can_fetch(url, user_agent='*'): # Vérifie si le robots.txt du site autorise le crawling
+def _can_fetch(url, user_agent='*'): 
+    """Vérifie si le robots.txt du site autorise le crawling"""
     domain = urljoin(url, '/')
     if domain not in robot_parsers:
         parser = RobotFileParser()
