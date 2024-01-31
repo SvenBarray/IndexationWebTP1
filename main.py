@@ -6,6 +6,7 @@ from urllib.robotparser import RobotFileParser
 from bs4 import BeautifulSoup
 import warnings
 import xml.etree.ElementTree as ET
+from urllib.error import HTTPError, URLError
 
 def crawl(start_url, max_urls=50):
     visited_urls = set()
@@ -20,35 +21,38 @@ def crawl(start_url, max_urls=50):
             if wait_time > 0:
                 time.sleep(wait_time)
 
-            response = urlopen(current_url) # Effectue la requête HTTP pour obtenir la page
-            last_request_time[domain] = datetime.now()  # Mise à jour du temps de la dernière requête
-            page_content = response.read()
+            with urlopen(current_url) as response:  # Effectue la requête HTTP pour obtenir la page
+                page_content = response.read()
+                last_request_time[domain] = datetime.now()  # Mise à jour du temps de la dernière requête
 
-            soup = BeautifulSoup(page_content, 'html.parser') # Analyse le HTML de la page
-            link_count = 0  # Compteur pour le nombre de liens suivis sur la page actuelle
+                soup = BeautifulSoup(page_content, 'html.parser')  # Analyse le HTML de la page
+                link_count = 0  # Compteur pour le nombre de liens suivis sur la page actuelle
 
-            for link in soup.find_all('a'): # Parcourt tous les liens (<a href="...">) trouvés dans la page
-                if link_count >= 5 or len(visited_urls) >= max_urls:  # Limite à 5 liens par page, et vérifie encore la limite max_urls, pour éviter par exemple de passer de 48 à 53 urls ici avec la limite de 5 liens.
-                    break
+                for link in soup.find_all('a'): # Parcourt tous les liens (<a href="...">) trouvés dans la page
+                    if link_count >= 5 or len(visited_urls) >= max_urls:  # Limite à 5 liens par page, et vérifie encore la limite max_urls, pour éviter par exemple de passer de 48 à 53 urls ici avec la limite de 5 liens.
+                        break
 
-                href = link.get('href')
-                if href and href.startswith('http'):
-                    absolute_url = urljoin(current_url, href) # Construit l'URL absolue
-                    if absolute_url not in visited_urls and _can_fetch(absolute_url):
-                        visited_urls.add(absolute_url)
-                        urls_to_visit.append(absolute_url)
-                        link_count += 1
+                    href = link.get('href')
+                    if href and href.startswith('http'):
+                        absolute_url = urljoin(current_url, href) # Construit l'URL absolue
+                        if absolute_url not in visited_urls and _can_fetch(absolute_url):
+                            visited_urls.add(absolute_url)
+                            urls_to_visit.append(absolute_url)
+                            link_count += 1
 
             print(f"Crawled: {current_url}")
             time.sleep(5) # Attend 5 secondes pour respecter la règle de politesse
 
+        except HTTPError as e:
+            print(f"Erreur HTTP lors de l'accès à {current_url}: {e.code} - {e.reason}")
+        except URLError as e:
+            print(f"Erreur d'URL lors de l'accès à {current_url}: {e.reason}")
         except Exception as e:
-            print(f"Error crawling {current_url}: {e}")
-            continue
+            print(f"Erreur générale lors de l'accès à {current_url}: {e}")
     
-        with open('crawled_webpages.txt', 'w') as file: # Écriture des URLs dans un fichier crawled_webpages.txt
-            for url in visited_urls:
-                file.write(url + '\n')
+    with open('crawled_webpages.txt', 'w') as file: # Écriture des URLs dans un fichier crawled_webpages.txt
+        for url in visited_urls:
+            file.write(url + '\n')
 
     return visited_urls
 
