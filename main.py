@@ -11,27 +11,24 @@ from urllib.error import HTTPError, URLError
 def crawl(start_url, max_urls=50):
     visited_urls = set()
     urls_to_visit = _fetch_sitemap_urls(start_url) + [start_url]
+    last_request_time = {}  # Dictionnaire pour suivre le temps de la dernière requête par domaine
 
     while urls_to_visit and len(visited_urls) < max_urls:
         current_url = urls_to_visit.pop(0)
         domain = urljoin(current_url, '/')
 
+        # Calcul du temps d'attente nécessaire
+        if domain in last_request_time: # Cette condition permet de ne pas à avoir à attendre les 5 secondes de politesse si on a changé de domaine
+            elapsed_since_last_request = (datetime.now() - last_request_time[domain]).total_seconds()
+            if elapsed_since_last_request < 5:
+                time.sleep(5 - elapsed_since_last_request)
+
         try:
-            wait_time = _should_wait(domain)
-            if wait_time > 0:
-                time.sleep(wait_time)
-
-            start_download_time = datetime.now()  # Commence à mesurer le temps de téléchargement
-
             with urlopen(current_url) as response:  # Effectue la requête HTTP pour obtenir la page
                 page_content = response.read()
 
-            download_duration = (datetime.now() - start_download_time).total_seconds()
-            if download_duration < 5:
-                time.sleep(5 - download_duration)  # Assure un intervalle de 5 secondes après le téléchargement
+            last_request_time[domain] = datetime.now()  # Mise à jour après la requête
 
-            last_request_time[domain] = datetime.now()  # Mise à jour du temps de la dernière requête
-            
             soup = BeautifulSoup(page_content, 'html.parser')  # Analyse le HTML de la page
             link_count = 0  # Compteur pour le nombre de liens suivis sur la page actuelle
 
@@ -48,7 +45,6 @@ def crawl(start_url, max_urls=50):
                         link_count += 1
 
             print(f"Crawled: {current_url}")
-            time.sleep(5) # Attend 5 secondes pour respecter la règle de politesse
 
         except HTTPError as e:
             print(f"Erreur HTTP lors de l'accès à {current_url}: {e.code} - {e.reason}")
@@ -82,20 +78,9 @@ def _fetch_sitemap_urls(url):
         print(f"Erreur lors de la récupération du sitemap : {e}")
         return []
 
-last_request_time = {}  # Dictionnaire pour suivre le temps de la dernière requête par domaine
-
-def _should_wait(domain): 
-    """Vérifie si le crawler doit attendre avant de faire une nouvelle requête au domaine donné."""
-    if domain in last_request_time:
-        elapsed = (datetime.now() - last_request_time[domain]).total_seconds()
-        if elapsed < 5:
-            return 5 - elapsed
-    return 0
-
-robot_parsers = {} # Initialisation du dictionnaire pour la mise en cache des parseurs de robots.txt
-
 def _can_fetch(url, user_agent='*'): 
     """Vérifie si le robots.txt du site autorise le crawling"""
+    robot_parsers = {}  # Dictionnaire pour la mise en cache des parseurs de robots.txt
     domain = urljoin(url, '/')
     if domain not in robot_parsers:
         parser = RobotFileParser()
