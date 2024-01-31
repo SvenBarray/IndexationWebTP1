@@ -12,7 +12,7 @@ def crawl(start_url, max_urls=50):
     while urls_to_visit and len(visited_urls) < max_urls:
         current_url = urls_to_visit.pop(0)
         domain = urljoin(current_url, '/')
-        
+
         try:
             wait_time = _should_wait(domain)
             if wait_time > 0:
@@ -23,10 +23,10 @@ def crawl(start_url, max_urls=50):
             page_content = response.read()
 
             soup = BeautifulSoup(page_content, 'html.parser') # Analyse le HTML de la page
-
             link_count = 0  # Compteur pour le nombre de liens suivis sur la page actuelle
+
             for link in soup.find_all('a'): # Parcourt tous les liens (<a href="...">) trouvés dans la page
-                if link_count >= 5:  # Limite à 5 liens par page
+                if link_count >= 5 or len(visited_urls) >= max_urls:  # Limite à 5 liens par page, et vérifie encore la limite max_urls, pour éviter par exemple de passer de 48 à 53 urls ici avec la limite de 5 liens.
                     break
 
                 href = link.get('href')
@@ -43,6 +43,10 @@ def crawl(start_url, max_urls=50):
         except Exception as e:
             print(f"Error crawling {current_url}: {e}")
             continue
+    
+        with open('crawled_webpages.txt', 'w') as file: # Écriture des URLs dans un fichier crawled_webpages.txt
+            for url in visited_urls:
+                file.write(url + '\n')
 
     return visited_urls
 
