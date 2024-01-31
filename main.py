@@ -7,6 +7,25 @@ from bs4 import BeautifulSoup
 import warnings
 import xml.etree.ElementTree as ET
 from urllib.error import HTTPError, URLError
+import sqlite3
+
+def create_database():
+    conn = sqlite3.connect('crawler.db')
+    c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS pages
+                 (url TEXT PRIMARY KEY, last_crawled TIMESTAMP)''')
+    conn.commit()
+    conn.close()
+
+create_database()
+
+def insert_or_update_page(url, timestamp):
+    conn = sqlite3.connect('crawler.db')
+    c = conn.cursor()
+    c.execute("INSERT OR REPLACE INTO pages (url, last_crawled) VALUES (?, ?)", 
+              (url, timestamp))
+    conn.commit()
+    conn.close()
 
 def crawl(start_url, max_urls=50):
     visited_urls = set()
@@ -31,6 +50,8 @@ def crawl(start_url, max_urls=50):
 
             soup = BeautifulSoup(page_content, 'html.parser')  # Analyse le HTML de la page
             link_count = 0  # Compteur pour le nombre de liens suivis sur la page actuelle
+
+            insert_or_update_page(current_url, datetime.now())
 
             for link in soup.find_all('a'): # Parcourt tous les liens (<a href="...">) trouvés dans la page
                 if link_count >= 5 or len(visited_urls) >= max_urls:  # Limite à 5 liens par page, et vérifie encore la limite max_urls, pour éviter par exemple de passer de 48 à 53 urls ici avec la limite de 5 liens.
